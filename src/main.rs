@@ -2,7 +2,7 @@ use clap::Parser;
 use rusoto_core::Region;
 use rusoto_logs::{
     CloudWatchLogs, CloudWatchLogsClient, DescribeLogGroupsRequest, DescribeLogStreamsRequest,
-    LogGroup, LogStream,
+    LogStream,
 };
 use std::fmt::Debug;
 
@@ -19,10 +19,8 @@ async fn main() {
     let args = Args::parse();
     println!("{:?}", args);
 
-    let log_group = "/aws/lambda/SpotrDomainApi-Worker-prd";
-
     let aws_logs = AWSLogs::new();
-    aws_logs.get_log_streams(log_group).await;
+    // aws_logs.get_log_streams(log_group).await;
     aws_logs.get_log_groups().await;
 }
 
@@ -36,14 +34,6 @@ impl AWSLogs {
             client: CloudWatchLogsClient::new(Region::EuCentral1),
         }
     }
-
-    async fn print_log_groups(&self) {
-        let groups = self.get_log_groups().await;
-        for group in groups.iter() {
-            println! {"{:?}", group}
-        }
-    }
-
     async fn get_log_streams(&self, log_group: &str) {
         let req = DescribeLogStreamsRequest {
             log_group_name: log_group.to_owned(),
@@ -57,20 +47,37 @@ impl AWSLogs {
             },
             Err(error) => {
                 println!("Error: {:?}", error);
+                if error.to_string() == "ThrottlingException" {
+                    println!("boo")
+                }
             }
         }
     }
 
-    async fn get_log_groups(&self) -> Vec<LogGroup> {
-        let req = DescribeLogGroupsRequest::default();
-        let resp = self.client.describe_log_groups(req).await.unwrap();
+    async fn get_log_groups(&self) {
+        let mut finished = false;
 
-        let token = resp.next_token.unwrap();
-        let groups = resp.log_groups.unwrap();
+        while !finished {
+            let req = DescribeLogGroupsRequest::default();
+            let resp = match self.client.describe_log_groups(req).await {
+                Ok(response) => response,
+                Err(error) => {
+                    println!("Error found: {error}");
+                    return;
+                }
+            };
 
-        println!("Token: {:?}", token);
+            let groups = resp.log_groups.unwrap();
 
-        return groups;
+            for group in groups.iter() {
+                let name = group.log_group_name.as_ref().unwrap();
+                println! {"{}", name}
+            }
+
+            if resp.next_token.unwrap() == "" {
+                finished = true
+            }
+        }
     }
 }
 
@@ -80,3 +87,5 @@ async fn print_data<T: Debug>(streams: Vec<T>) {
         println!("")
     }
 }
+
+

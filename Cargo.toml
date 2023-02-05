@@ -10,5 +10,8 @@ clap = { version = "4.1.4", features = ["derive"] }
 rusoto_core = "0.45.0"
 rusoto_logs = "0.45.0"
 tokio = { version = "0.2.0", features = ["full"] }
+aws-sdk-cloudwatchlogs = "0.24.0"    # AWS SDK for Amazon CloudWatch Logs
+aws-sdk-config = "0.24.0"                          # AWS SDK for AWS Config
+
 
 
