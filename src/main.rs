@@ -1,6 +1,10 @@
 use clap::Parser;
 use rusoto_core::Region;
-use rusoto_logs::{CloudWatchLogs, CloudWatchLogsClient, DescribeLogStreamsRequest, LogStream};
+use rusoto_logs::{
+    CloudWatchLogs, CloudWatchLogsClient, DescribeLogGroupsRequest, DescribeLogStreamsRequest,
+    LogGroup, LogStream,
+};
+use std::fmt::Debug;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -16,29 +20,61 @@ async fn main() {
     println!("{:?}", args);
 
     let log_group = "/aws/lambda/SpotrDomainApi-Worker-prd";
-    print_log_stream(log_group).await;
+
+    let aws_logs = AWSLogs::new();
+    aws_logs.get_log_streams(log_group).await;
+    aws_logs.get_log_groups().await;
 }
 
-async fn print_log_stream(log_group: &str) {
-    let client = CloudWatchLogsClient::new(Region::EuCentral1);
+struct AWSLogs {
+    client: CloudWatchLogsClient,
+}
 
-    let req = DescribeLogStreamsRequest {
-        log_group_name: log_group.to_owned(),
-        ..Default::default()
-    };
-
-    match client.describe_log_streams(req).await {
-        Ok(resp) => match resp.log_streams {
-            Some(log_streams) => print_the_streams(log_streams).await,
-            None => println!("Nothing found"),
-        },
-        Err(error) => {
-            println!("Error: {:?}", error);
+impl AWSLogs {
+    fn new() -> AWSLogs {
+        AWSLogs {
+            client: CloudWatchLogsClient::new(Region::EuCentral1),
         }
+    }
+
+    async fn print_log_groups(&self) {
+        let groups = self.get_log_groups().await;
+        for group in groups.iter() {
+            println! {"{:?}", group}
+        }
+    }
+
+    async fn get_log_streams(&self, log_group: &str) {
+        let req = DescribeLogStreamsRequest {
+            log_group_name: log_group.to_owned(),
+            ..Default::default()
+        };
+
+        match self.client.describe_log_streams(req).await {
+            Ok(resp) => match resp.log_streams {
+                Some(log_streams) => print_data::<LogStream>(log_streams).await,
+                None => println!("Nothing found"),
+            },
+            Err(error) => {
+                println!("Error: {:?}", error);
+            }
+        }
+    }
+
+    async fn get_log_groups(&self) -> Vec<LogGroup> {
+        let req = DescribeLogGroupsRequest::default();
+        let resp = self.client.describe_log_groups(req).await.unwrap();
+
+        let token = resp.next_token.unwrap();
+        let groups = resp.log_groups.unwrap();
+
+        println!("Token: {:?}", token);
+
+        return groups;
     }
 }
 
-async fn print_the_streams(streams: Vec<LogStream>) {
+async fn print_data<T: Debug>(streams: Vec<T>) {
     for stream in streams.iter().take(5) {
         println!("Stream {:?}", stream);
         println!("")
